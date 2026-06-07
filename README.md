@@ -81,3 +81,4 @@ Si la columna de caché no se encuentra, la aplicación asignará por defecto `0
 Desarrollado en colaboración con **Oz** (AI Agent de Warp).
 
 *Co-Authored-By: Oz <oz-agent@warp.dev>*
+# model-token-calculator
