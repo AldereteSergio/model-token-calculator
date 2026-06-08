@@ -81,4 +81,10 @@ Si la columna de caché no se encuentra, la aplicación asignará por defecto `0
 Desarrollado en colaboración con **Oz** (AI Agent de Warp).
 
 *Co-Authored-By: Oz <oz-agent@warp.dev>*
+
+## 🌐 Despliegue Público
+
+La aplicación está configurada para compilarse y desplegarse automáticamente en GitHub Pages. Puedes acceder a la versión en vivo aquí:
+👉 **[https://AldereteSergio.github.io/model-token-calculator/](https://AldereteSergio.github.io/model-token-calculator/)**
+
 # model-token-calculator
