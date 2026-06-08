@@ -34,10 +34,10 @@ const INITIAL_CSV_DATA = [
 const INITIAL_MODELS = [
   { id: '1', name: 'nemotron-3-ultra-550b-a55b', inputPrice: 0.50, outputPrice: 2.50, cachePrice: 0.50 },
   { id: '2', name: 'minimax-m3', inputPrice: 0.60, outputPrice: 2.40, cachePrice: 0.12 },
-  { id: '3', name: 'qwen3.7-max', inputPrice: 2.50, outputPrice: 7.50, cachePrice: 0.50 },
+  { id: '3', name: 'qwen3.7-max', inputPrice: 1.25, outputPrice: 3.75, cachePrice: 0.25 },
   { id: '4', name: 'gemini-3.5-flash', inputPrice: 1.50, outputPrice: 9.00, cachePrice: 0.15 },
   { id: '5', name: 'gemini-3.1-flash-lite', inputPrice: 0.25, outputPrice: 1.50, cachePrice: 0.025 },
-  { id: '6', name: 'grok-4.3', inputPrice: 1.25, outputPrice: 2.50, cachePrice: 1.25 },
+  { id: '6', name: 'grok-4.3', inputPrice: 1.25, outputPrice: 2.50, cachePrice: 0.20 },
   { id: '7', name: 'qwen3.6-flash', inputPrice: 0.25, outputPrice: 1.50, cachePrice: 0.025 },
   { id: '8', name: 'deepseek-v4-pro', inputPrice: 0.435, outputPrice: 0.87, cachePrice: 0.003625 },
   { id: '9', name: 'deepseek-v4-flash', inputPrice: 0.0983, outputPrice: 0.1966, cachePrice: 0.0197 },
