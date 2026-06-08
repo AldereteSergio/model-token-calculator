@@ -54,7 +54,36 @@ const INITIAL_MODELS = [
 export default function App() {
   const [csvData, setCsvData] = useState(INITIAL_CSV_DATA);
   const [models, setModels] = useState(INITIAL_MODELS);
-  const [selectedModelId, setSelectedModelId] = useState('4'); // google/gemini-3.5-flash por defecto
+  const [selectedModelId, setSelectedModelId] = useState('4'); // gemini-3.5-flash por defecto
+  
+  // Referencias y estados para el scroll por arrastre horizontal del gráfico de comparación
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isDown, setIsDown] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!scrollRef.current) return;
+    setIsDown(true);
+    setStartX(e.pageX - scrollRef.current.offsetLeft);
+    setScrollLeft(scrollRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDown(false);
+  };
+
+  const handleMouseUp = () => {
+    setIsDown(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDown || !scrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5; // Velocidad de arrastre
+    scrollRef.current.scrollLeft = scrollLeft - walk;
+  };
   
   // Modos de formulario para modelos (Agregar / Editar)
   const [isEditing, setIsEditing] = useState(false);
@@ -530,96 +559,112 @@ export default function App() {
             </div>
 
             {/* Visualización de Barras de Costo Custom SVG */}
-            <div className="w-full overflow-hidden mt-2">
-              <div className="relative pt-2 pb-6 px-1">
-                
-                {/* Eje de fondo (Líneas guía de costo) */}
-                <div className="absolute inset-x-0 top-[30px] h-[140px] flex flex-col justify-between pointer-events-none">
-                  {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
-                    <div key={i} className="w-full flex items-center gap-2">
-                      <span className="text-[10px] text-slate-500 font-mono w-12 text-right">
-                        {formatCurrency(maxCompareCost * (1 - ratio))}
-                      </span>
-                      <div className="flex-1 border-b border-slate-700/50 border-dashed"></div>
+            <div className="w-full mt-2 flex gap-1">
+              
+              {/* Eje Y Fijo (Etiquetas de costo) */}
+              <div className="h-[140px] mt-[30px] flex flex-col justify-between pointer-events-none select-none text-right pr-2 shrink-0">
+                {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
+                  <span key={i} className="text-[10px] text-slate-500 font-mono w-14 block">
+                    {formatCurrency(maxCompareCost * (1 - ratio))}
+                  </span>
+                ))}
+              </div>
+
+              {/* Contenedor Deslizable de las Barras */}
+              <div className="flex-1 relative overflow-hidden">
+                <div 
+                  ref={scrollRef}
+                  onMouseDown={handleMouseDown}
+                  onMouseLeave={handleMouseLeave}
+                  onMouseUp={handleMouseUp}
+                  onMouseMove={handleMouseMove}
+                  className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-700/60 scrollbar-track-slate-800/10 pb-2 cursor-grab active:cursor-grabbing select-none"
+                >
+                  <div 
+                    style={{ minWidth: `${Math.max(modelComparisons.length * 85, 500)}px` }}
+                    className="relative z-10 flex justify-around items-end h-[220px] pt-4"
+                  >
+                    {/* Líneas Guía de Fondo (Estiradas por todo el minWidth) */}
+                    <div className="absolute inset-x-0 top-[30px] h-[140px] flex flex-col justify-between pointer-events-none">
+                      {[0, 0.25, 0.5, 0.75, 1].map((_, i) => (
+                        <div key={i} className="w-full border-b border-slate-700/40 border-dashed"></div>
+                      ))}
                     </div>
-                  ))}
-                </div>
 
-                {/* Contenedor de las Barras */}
-                <div className="relative z-10 flex justify-around items-end h-[220px] pt-4 pl-12">
-                  {modelComparisons.map((model) => {
-                    const heightPercent = Math.max((model.totalCost / maxCompareCost) * 100, 3);
-                    const isSelected = model.id === selectedModelId;
-                    const isCheapest = model.id === bestModel?.id;
+                    {modelComparisons.map((model) => {
+                      const heightPercent = Math.max((model.totalCost / maxCompareCost) * 100, 3);
+                      const isSelected = model.id === selectedModelId;
+                      const isCheapest = model.id === bestModel?.id;
 
-                    return (
-                      <div 
-                        key={model.id} 
-                        className="group flex flex-col items-center flex-1 max-w-[80px] cursor-pointer"
-                        onClick={() => setSelectedModelId(model.id)}
-                      >
-                        {/* Tooltip con desglose en hover */}
-                        <div className="absolute mb-[240px] opacity-0 group-hover:opacity-100 transition-all duration-200 bg-slate-950/95 text-slate-200 text-[10px] p-2.5 rounded-xl border border-slate-600 shadow-2xl pointer-events-none z-50 text-center w-36">
-                          <p className="font-bold border-b border-slate-700 pb-1 mb-1 text-white">{model.name}</p>
-                          <p>Input: {formatCurrency((stats.totalInput / 1000000) * model.inputPrice)}</p>
-                          <p>Output: {formatCurrency((stats.totalOutput / 1000000) * model.outputPrice)}</p>
-                          <p>Cache: {formatCurrency((stats.totalCache / 1000000) * model.cachePrice)}</p>
-                        </div>
+                      return (
+                        <div 
+                          key={model.id} 
+                          className="group flex flex-col items-center flex-1 max-w-[80px] cursor-pointer"
+                          onClick={() => setSelectedModelId(model.id)}
+                        >
+                          {/* Tooltip con desglose en hover */}
+                          <div className="absolute mb-[240px] opacity-0 group-hover:opacity-100 transition-all duration-200 bg-slate-950/95 text-slate-200 text-[10px] p-2.5 rounded-xl border border-slate-600 shadow-2xl pointer-events-none z-50 text-center w-36">
+                            <p className="font-bold border-b border-slate-700 pb-1 mb-1 text-white">{model.name}</p>
+                            <p>Input: {formatCurrency((stats.totalInput / 1000000) * model.inputPrice)}</p>
+                            <p>Output: {formatCurrency((stats.totalOutput / 1000000) * model.outputPrice)}</p>
+                            <p>Cache: {formatCurrency((stats.totalCache / 1000000) * model.cachePrice)}</p>
+                          </div>
 
-                        {/* Contenedor de la Barra con altura fija para resolver el porcentaje */}
-                        <div className="h-[140px] w-full flex items-end justify-center relative">
-                          {/* Barra */}
-                          <div 
-                            style={{ height: `${heightPercent}%` }}
-                            className={`w-10 sm:w-12 rounded-t-lg transition-all duration-300 relative ${
-                              isCheapest 
-                                ? 'bg-gradient-to-t from-emerald-600 to-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]' 
-                                : isSelected
-                                  ? 'bg-gradient-to-t from-cyan-600 to-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
-                                  : 'bg-gradient-to-t from-slate-700 to-slate-500/80 group-hover:from-slate-600 group-hover:to-slate-400'
-                            }`}
-                          >
-                            {/* Valor arriba de la barra (Posicionado Absolutamente) */}
-                            <span className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap text-[10px] font-bold font-mono transition-colors ${
-                              isCheapest ? 'text-emerald-400' : isSelected ? 'text-cyan-400' : 'text-slate-400'
-                            }`}>
-                              {formatCurrency(model.totalCost)}
-                            </span>
+                          {/* Contenedor de la Barra con altura fija para resolver el porcentaje */}
+                          <div className="h-[140px] w-full flex items-end justify-center relative">
+                            {/* Barra */}
+                            <div 
+                              style={{ height: `${heightPercent}%` }}
+                              className={`w-10 sm:w-12 rounded-t-lg transition-all duration-300 relative ${
+                                isCheapest 
+                                  ? 'bg-gradient-to-t from-emerald-600 to-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]' 
+                                  : isSelected
+                                    ? 'bg-gradient-to-t from-cyan-600 to-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                                    : 'bg-gradient-to-t from-slate-700 to-slate-500/80 group-hover:from-slate-600 group-hover:to-slate-400'
+                              }`}
+                            >
+                              {/* Valor arriba de la barra (Posicionado Absolutamente) */}
+                              <span className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap text-[10px] font-bold font-mono transition-colors ${
+                                isCheapest ? 'text-emerald-400' : isSelected ? 'text-cyan-400' : 'text-slate-400'
+                              }`}>
+                                {formatCurrency(model.totalCost)}
+                              </span>
 
-                            {/* Destello sutil para la más barata */}
+                              {/* Destello sutil para la más barata */}
+                              {isCheapest && (
+                                <div className="absolute inset-x-0 top-0 h-1 bg-white/40 rounded-t-lg"></div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Etiqueta / Nombre */}
+                          <span className={`text-[9px] font-semibold mt-2.5 text-center truncate w-full px-1 transition-colors ${
+                            isSelected ? 'text-cyan-400 font-extrabold' : 'text-slate-400'
+                          }`}>
+                            {model.name}
+                          </span>
+                          
+                          {/* Badges de condición */}
+                          <div className="h-4 flex items-center justify-center">
                             {isCheapest && (
-                              <div className="absolute inset-x-0 top-0 h-1 bg-white/40 rounded-t-lg"></div>
+                              <span className="text-[8px] px-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded font-bold uppercase mt-0.5 tracking-wider">
+                                Más Barato
+                              </span>
+                            )}
+                            {!isCheapest && isSelected && (
+                              <span className="text-[8px] px-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded font-bold uppercase mt-0.5 tracking-wider">
+                                Activo
+                              </span>
                             )}
                           </div>
-                        </div>
 
-                        {/* Etiqueta / Nombre */}
-                        <span className={`text-[9px] font-semibold mt-2.5 text-center truncate w-full px-1 transition-colors ${
-                          isSelected ? 'text-cyan-400 font-extrabold' : 'text-slate-400'
-                        }`}>
-                          {model.name}
-                        </span>
-                        
-                        {/* Badges de condición */}
-                        <div className="h-4 flex items-center justify-center">
-                          {isCheapest && (
-                            <span className="text-[8px] px-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded font-bold uppercase mt-0.5 tracking-wider">
-                              Más Barato
-                            </span>
-                          )}
-                          {!isCheapest && isSelected && (
-                            <span className="text-[8px] px-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded font-bold uppercase mt-0.5 tracking-wider">
-                              Activo
-                            </span>
-                          )}
                         </div>
-
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-
               </div>
+
             </div>
           </section>
 
