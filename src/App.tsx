@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 
 // Datos agregados del CSV original proveído por el usuario
 const INITIAL_CSV_DATA = [
@@ -176,7 +176,7 @@ export default function App() {
     notificationTimeoutRef.current = window.setTimeout(() => setNotification(null), 4000);
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     return () => {
       if (notificationTimeoutRef.current) {
         clearTimeout(notificationTimeoutRef.current);
@@ -619,7 +619,7 @@ export default function App() {
     ? dynamicCosts.overall - bestModel.totalCost
     : 0;
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isModelModalOpen) {
         handleCancelEdit();
@@ -686,7 +686,14 @@ export default function App() {
           <section className="bg-slate-800/50 p-5 md:p-6 rounded-3xl border border-slate-700/70 shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-5">
               <div>
-                <h3 className="text-lg font-bold text-white">Comparativa directa</h3>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  Comparativa directa
+                  {threeWayCompare.winnerKeys.length > 1 && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      Empate
+                    </span>
+                  )}
+                </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Dos modelos API (proyección /mes) contra un plan Cursor. Gana el más barato.
                 </p>
@@ -760,7 +767,7 @@ export default function App() {
                   >
                     {isWinner && (
                       <span className="absolute -top-2.5 left-3 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950">
-                        Gana
+                        {threeWayCompare.winnerKeys.length > 1 ? 'Empate' : 'Gana'}
                       </span>
                     )}
                     <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
