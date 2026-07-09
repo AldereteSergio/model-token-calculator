@@ -117,3 +117,6 @@ Thumbs.db
 dist/
 dist-ssr/
 *.local
+.cursor/
+.cursor/rules
+.cursor/skills

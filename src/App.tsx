@@ -51,10 +51,84 @@ const INITIAL_MODELS = [
   { id: '17', name: 'gemini-3-flash-preview', inputPrice: 0.50, outputPrice: 3.00, cachePrice: 0.05 }
 ];
 
+const CURSOR_PLANS = [
+  { id: 'pro', name: 'Cursor Pro', price: 20 },
+  { id: 'pro_plus', name: 'Cursor Pro+', price: 60 },
+  { id: 'ultra', name: 'Cursor Ultra', price: 200 }
+];
+
+const EMPTY_MODEL_FORM = {
+  name: '',
+  inputPrice: '',
+  outputPrice: '',
+  cachePrice: ''
+};
+
+/** Acepta punto o coma; permite vacío mientras se escribe. */
+const sanitizePriceInput = (raw: string): string => {
+  let s = raw.replace(/[^\d.,]/g, '').replace(/,/g, '.');
+  const parts = s.split('.');
+  if (parts.length > 2) {
+    s = parts[0] + '.' + parts.slice(1).join('');
+  }
+  return s;
+};
+
+const parsePriceInput = (raw: string): number | null => {
+  const normalized = raw.trim().replace(',', '.');
+  if (normalized === '' || normalized === '.') return 0;
+  const n = Number(normalized);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+};
+
+const formatPriceForInput = (n: number): string => {
+  if (!Number.isFinite(n)) return '';
+  // Evita notación científica y ceros basura
+  return String(n);
+};
+
+const MONTH_NAMES_ES = [
+  'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+  'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
+];
+
+const formatShortDate = (iso: string): string => {
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return iso;
+  return `${d} ${MONTH_NAMES_ES[m - 1]} ${y}`;
+};
+
+const formatDateRangeLabel = (start: string, end: string): string => {
+  if (!start || !end) return 'Sin datos';
+  if (start === end) return formatShortDate(start);
+  
+  const [sy, sm, sd] = start.split('-').map(Number);
+  const [ey, em, ed] = end.split('-').map(Number);
+  
+  // Mismo año y mes: "9–30 jun 2026"
+  if (sy === ey && sm === em) {
+    return `${sd}–${ed} ${MONTH_NAMES_ES[sm - 1]} ${sy}`;
+  }
+  
+  // Mismo año: "9 may – 30 jun 2026"
+  if (sy === ey) {
+    return `${sd} ${MONTH_NAMES_ES[sm - 1]} – ${ed} ${MONTH_NAMES_ES[em - 1]} ${sy}`;
+  }
+  
+  return `${formatShortDate(start)} – ${formatShortDate(end)}`;
+};
+
+type ModelFormState = typeof EMPTY_MODEL_FORM;
+type NotificationState = { message: string; type: 'success' | 'error' } | null;
+
 export default function App() {
   const [csvData, setCsvData] = useState(INITIAL_CSV_DATA);
   const [models, setModels] = useState(INITIAL_MODELS);
   const [selectedModelId, setSelectedModelId] = useState('4'); // gemini-3.5-flash por defecto
+  const [vsModelAId, setVsModelAId] = useState('4');
+  const [vsModelBId, setVsModelBId] = useState('9'); // deepseek-v4-flash por defecto
+  const [cursorPlanId, setCursorPlanId] = useState('pro');
+  const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   
   // Referencias y estados para el scroll por arrastre horizontal del gráfico de comparación
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -85,32 +159,44 @@ export default function App() {
     scrollRef.current.scrollLeft = scrollLeft - walk;
   };
   
-  // Modos de formulario para modelos (Agregar / Editar)
+  // Modos de formulario para modelos (Agregar / Editar) — precios como string para UX
   const [isEditing, setIsEditing] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [modelForm, setModelForm] = useState({
-    name: '',
-    inputPrice: 0.0,
-    outputPrice: 0.0,
-    cachePrice: 0.0
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [modelForm, setModelForm] = useState<ModelFormState>({ ...EMPTY_MODEL_FORM });
 
   // Notificación local personalizada
-  const [notification, setNotification] = useState(null);
+  const [notification, setNotification] = useState<NotificationState>(null);
+  const notificationTimeoutRef = useRef<number | null>(null);
 
-  const showNotification = (message, type = 'success') => {
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    if (notificationTimeoutRef.current) {
+      clearTimeout(notificationTimeoutRef.current);
+    }
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4000);
+    notificationTimeoutRef.current = window.setTimeout(() => setNotification(null), 4000);
+  };
+
+  React.useEffect(() => {
+    return () => {
+      if (notificationTimeoutRef.current) {
+        clearTimeout(notificationTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handlePriceFieldChange = (field: 'inputPrice' | 'outputPrice' | 'cachePrice', raw: string) => {
+    setModelForm(prev => ({ ...prev, [field]: sanitizePriceInput(raw) }));
   };
 
   // Modelo actualmente seleccionado
   const activeModel = useMemo(() => {
-    return models.find(m => m.id === selectedModelId) || models[0] || { name: 'Ninguno', inputPrice: 0, outputPrice: 0, cachePrice: 0 };
+    const found = models.find(m => m.id === selectedModelId) ?? models[0];
+    return found ?? { id: '', name: 'Ninguno', inputPrice: 0, outputPrice: 0, cachePrice: 0 };
   }, [models, selectedModelId]);
 
   // Manejo de carga de nuevo archivo CSV personalizado
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
@@ -133,7 +219,7 @@ export default function App() {
           return;
         }
 
-        const dailyAggregates = {};
+        const dailyAggregates: Record<string, { input: number; output: number; cache: number; total: number }> = {};
 
         for (let i = 1; i < lines.length; i++) {
           if (!lines[i].trim()) continue;
@@ -187,10 +273,20 @@ export default function App() {
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   // Cálculos de Tokens Generales
   const stats = useMemo(() => {
+    const empty = {
+      totalInput: 0, totalOutput: 0, totalCache: 0, totalTokens: 0,
+      last30Input: 0, last30Output: 0, last30Cache: 0, last30Tokens: 0,
+      startDate: '', endDate: '', spanDays: 0, activeDays: 0,
+      last30CoversAll: true, cachePct: 0, inputPct: 0, outputPct: 0
+    };
+
+    if (csvData.length === 0) return empty;
+
     let totalInput = 0;
     let totalOutput = 0;
     let totalCache = 0;
@@ -202,23 +298,24 @@ export default function App() {
     });
 
     const totalTokens = totalInput + totalOutput + totalCache;
+    const startDate = csvData[0].date;
+    const endDate = csvData[csvData.length - 1].date;
 
-    // Calcular últimos 30 días
-    // Obtenemos la última fecha en el dataset como punto de referencia
-    if (csvData.length === 0) {
-      return { totalInput: 0, totalOutput: 0, totalCache: 0, totalTokens: 0, last30Input: 0, last30Output: 0, last30Cache: 0, last30Tokens: 0 };
-    }
+    const startMs = new Date(startDate + 'T00:00:00').getTime();
+    const endMs = new Date(endDate + 'T00:00:00').getTime();
+    const spanDays = Math.max(1, Math.round((endMs - startMs) / 86400000) + 1);
+    const activeDays = csvData.filter(d => d.total > 0).length;
 
-    const lastDate = new Date(csvData[csvData.length - 1].date);
+    const lastDate = new Date(endDate + 'T00:00:00');
     const thirtyDaysAgo = new Date(lastDate);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29); // ventana inclusiva de 30 días
 
     let last30Input = 0;
     let last30Output = 0;
     let last30Cache = 0;
 
     csvData.forEach(d => {
-      const dDate = new Date(d.date);
+      const dDate = new Date(d.date + 'T00:00:00');
       if (dDate >= thirtyDaysAgo && dDate <= lastDate) {
         last30Input += d.input;
         last30Output += d.output;
@@ -227,6 +324,9 @@ export default function App() {
     });
 
     const last30Tokens = last30Input + last30Output + last30Cache;
+    const last30CoversAll = spanDays <= 30;
+
+    const pct = (part: number) => (totalTokens > 0 ? (part / totalTokens) * 100 : 0);
 
     return {
       totalInput,
@@ -236,31 +336,119 @@ export default function App() {
       last30Input,
       last30Output,
       last30Cache,
-      last30Tokens
+      last30Tokens,
+      startDate,
+      endDate,
+      spanDays,
+      activeDays,
+      last30CoversAll,
+      cachePct: pct(totalCache),
+      inputPct: pct(totalInput),
+      outputPct: pct(totalOutput)
     };
   }, [csvData]);
 
   // Función genérica para calcular costos basados en un modelo específico
-  const calculateCost = (input, output, cache, model) => {
+  const calculateCost = (input: number, output: number, cache: number, model: { inputPrice: number; outputPrice: number; cachePrice: number }) => {
     const inputCost = (input / 1000000) * model.inputPrice;
     const outputCost = (output / 1000000) * model.outputPrice;
     const cacheCost = (cache / 1000000) * model.cachePrice;
     return inputCost + outputCost + cacheCost;
   };
 
+  const calculateCostBreakdown = (input: number, output: number, cache: number, model: { inputPrice: number; outputPrice: number; cachePrice: number }) => {
+    const inputCost = (input / 1000000) * model.inputPrice;
+    const outputCost = (output / 1000000) * model.outputPrice;
+    const cacheCost = (cache / 1000000) * model.cachePrice;
+    const asInputCost = (cache / 1000000) * model.inputPrice;
+    return {
+      inputCost,
+      outputCost,
+      cacheCost,
+      total: inputCost + outputCost + cacheCost,
+      cacheSavings: Math.max(0, asInputCost - cacheCost)
+    };
+  };
+
   // Cálculos dinámicos de costos por periodos basados en el modelo activo
   const dynamicCosts = useMemo(() => {
-    if (csvData.length === 0) return { overall: 0, last30: 0 };
+    if (csvData.length === 0) {
+      return {
+        overall: 0, last30: 0,
+        breakdown: { inputCost: 0, outputCost: 0, cacheCost: 0, total: 0, cacheSavings: 0 },
+        monthlyProjection: 0
+      };
+    }
     const overall = calculateCost(stats.totalInput, stats.totalOutput, stats.totalCache, activeModel);
     const last30 = calculateCost(stats.last30Input, stats.last30Output, stats.last30Cache, activeModel);
-    return { overall, last30 };
+    const breakdown = calculateCostBreakdown(stats.totalInput, stats.totalOutput, stats.totalCache, activeModel);
+    const monthlyProjection = stats.spanDays > 0 ? (overall / stats.spanDays) * 30 : overall;
+    return { overall, last30, breakdown, monthlyProjection };
   }, [stats, activeModel, csvData]);
+
+  const activeCursorPlan = useMemo(
+    () => CURSOR_PLANS.find(p => p.id === cursorPlanId) || CURSOR_PLANS[0],
+    [cursorPlanId]
+  );
+
+  const vsModelA = useMemo(
+    () => models.find(m => m.id === vsModelAId) || models[0],
+    [models, vsModelAId]
+  );
+
+  const vsModelB = useMemo(
+    () => models.find(m => m.id === vsModelBId) || models[1] || models[0],
+    [models, vsModelBId]
+  );
+
+  const threeWayCompare = useMemo(() => {
+    const span = Math.max(stats.spanDays, 1);
+    const toMonthly = (totalCost: number) => (totalCost / span) * 30;
+
+    const aCost = vsModelA
+      ? calculateCost(stats.totalInput, stats.totalOutput, stats.totalCache, vsModelA)
+      : 0;
+    const bCost = vsModelB
+      ? calculateCost(stats.totalInput, stats.totalOutput, stats.totalCache, vsModelB)
+      : 0;
+
+    const contenders = [
+      {
+        key: 'a',
+        kind: 'api' as const,
+        label: vsModelA?.name || 'Modelo A',
+        monthly: toMonthly(aCost),
+        periodCost: aCost
+      },
+      {
+        key: 'b',
+        kind: 'api' as const,
+        label: vsModelB?.name || 'Modelo B',
+        monthly: toMonthly(bCost),
+        periodCost: bCost
+      },
+      {
+        key: 'cursor',
+        kind: 'plan' as const,
+        label: activeCursorPlan.name,
+        monthly: activeCursorPlan.price,
+        periodCost: activeCursorPlan.price
+      }
+    ];
+
+    const minMonthly = Math.min(...contenders.map(c => c.monthly));
+    const winnerKeys = contenders
+      .filter(c => Math.abs(c.monthly - minMonthly) < 0.0001)
+      .map(c => c.key);
+
+    return { contenders, winnerKeys };
+  }, [stats, vsModelA, vsModelB, activeCursorPlan]);
 
   // Encontrar el día más caro basado en el modelo seleccionado
   const mostExpensiveDay = useMemo(() => {
     if (csvData.length === 0) return { date: 'N/A', cost: 0, totalTokens: 0 };
     let maxCost = -1;
-    let bestDay = null;
+    let bestDay: { date: string; cost: number; totalTokens: number } | null = null;
 
     csvData.forEach(d => {
       const dayCost = calculateCost(d.input, d.output, d.cache, activeModel);
@@ -282,15 +470,16 @@ export default function App() {
   const mostExpensiveWeek = useMemo(() => {
     if (csvData.length === 0) return { weekStart: 'N/A', cost: 0, totalTokens: 0 };
     
-    const weeksMap = {};
+    const weeksMap: Record<string, { input: number; output: number; cache: number; total: number }> = {};
 
     csvData.forEach(d => {
-      const dateObj = new Date(d.date);
+      const dateObj = new Date(d.date + 'T00:00:00');
       // Obtener el lunes de esa semana
       const day = dateObj.getDay();
       const diff = dateObj.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(dateObj.setDate(diff));
-      const weekKey = monday.toISOString().split('T')[0];
+      const monday = new Date(dateObj);
+      monday.setDate(diff);
+      const weekKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
 
       if (!weeksMap[weekKey]) {
         weeksMap[weekKey] = { input: 0, output: 0, cache: 0, total: 0 };
@@ -303,7 +492,6 @@ export default function App() {
     });
 
     let maxCost = -1;
-    let bestWeek = 'N/A';
     let bestWeekData = { weekStart: 'N/A', cost: 0, totalTokens: 0 };
 
     Object.keys(weeksMap).forEach(weekStart => {
@@ -311,7 +499,6 @@ export default function App() {
       const weekCost = calculateCost(w.input, w.output, w.cache, activeModel);
       if (weekCost > maxCost) {
         maxCost = weekCost;
-        bestWeek = weekStart;
         bestWeekData = {
           weekStart,
           cost: weekCost,
@@ -343,72 +530,104 @@ export default function App() {
   }, [modelComparisons]);
 
   // Gestión de Modelos (CRUD)
-  const handleAddOrUpdateModel = (e) => {
+  const openAddModelModal = () => {
+    setIsEditing(false);
+    setEditingId(null);
+    setModelForm({ ...EMPTY_MODEL_FORM });
+    setIsModelModalOpen(true);
+  };
+
+  const handleAddOrUpdateModel = (e: React.FormEvent) => {
     e.preventDefault();
     if (!modelForm.name.trim()) {
       showNotification('Por favor escribe un nombre válido para el modelo.', 'error');
       return;
     }
 
-    if (isEditing) {
-      setModels(prev => prev.map(m => m.id === editingId ? { ...m, ...modelForm } : m));
+    const inputPrice = parsePriceInput(modelForm.inputPrice);
+    const outputPrice = parsePriceInput(modelForm.outputPrice);
+    const cachePrice = parsePriceInput(modelForm.cachePrice);
+
+    if (inputPrice === null || outputPrice === null || cachePrice === null) {
+      showNotification('Por favor ingresa precios válidos (números positivos).', 'error');
+      return;
+    }
+
+    const prices = { inputPrice, outputPrice, cachePrice };
+
+    if (isEditing && editingId) {
+      setModels(prev => prev.map(m => m.id === editingId ? { ...m, name: modelForm.name.trim(), ...prices } : m));
       showNotification(`Modelo "${modelForm.name}" actualizado exitosamente.`);
-      setIsEditing(false);
-      setEditingId(null);
     } else {
       const newModel = {
         id: Date.now().toString(),
-        name: modelForm.name,
-        inputPrice: Number(modelForm.inputPrice) || 0,
-        outputPrice: Number(modelForm.outputPrice) || 0,
-        cachePrice: Number(modelForm.cachePrice) || 0
+        name: modelForm.name.trim(),
+        ...prices
       };
       setModels(prev => [...prev, newModel]);
       setSelectedModelId(newModel.id);
+      setVsModelAId(newModel.id);
       showNotification(`Modelo "${newModel.name}" agregado y seleccionado.`);
     }
 
-    // Resetear formulario
-    setModelForm({ name: '', inputPrice: 0, outputPrice: 0, cachePrice: 0 });
+    setIsEditing(false);
+    setEditingId(null);
+    setModelForm({ ...EMPTY_MODEL_FORM });
+    setIsModelModalOpen(false);
   };
 
-  const handleEditClick = (model) => {
+  const handleEditClick = (model: typeof INITIAL_MODELS[number]) => {
     setIsEditing(true);
     setEditingId(model.id);
     setModelForm({
       name: model.name,
-      inputPrice: model.inputPrice,
-      outputPrice: model.outputPrice,
-      cachePrice: model.cachePrice
+      inputPrice: formatPriceForInput(model.inputPrice),
+      outputPrice: formatPriceForInput(model.outputPrice),
+      cachePrice: formatPriceForInput(model.cachePrice)
     });
+    setIsModelModalOpen(true);
   };
 
-  const handleDeleteModel = (id, name) => {
+  const handleDeleteModel = (id: string, name: string) => {
     if (models.length <= 1) {
       showNotification('Debes mantener al menos un modelo de IA en la lista.', 'error');
       return;
     }
-    setModels(prev => prev.filter(m => m.id !== id));
+    const remaining = models.filter(m => m.id !== id);
+    setModels(remaining);
     showNotification(`Modelo "${name}" eliminado.`);
-    if (selectedModelId === id) {
-      const remaining = models.filter(m => m.id !== id);
-      setSelectedModelId(remaining[0].id);
-    }
+    if (selectedModelId === id) setSelectedModelId(remaining[0].id);
+    if (vsModelAId === id) setVsModelAId(remaining[0].id);
+    if (vsModelBId === id) setVsModelBId(remaining[Math.min(1, remaining.length - 1)].id);
   };
 
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditingId(null);
-    setModelForm({ name: '', inputPrice: 0, outputPrice: 0, cachePrice: 0 });
+    setModelForm({ ...EMPTY_MODEL_FORM });
+    setIsModelModalOpen(false);
   };
 
   // Formateadores convenientes
-  const formatNum = (num) => new Intl.NumberFormat('es-ES').format(Math.round(num));
-  const formatCurrency = (num) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(num);
+  const formatNum = (num: number) => new Intl.NumberFormat('es-ES').format(Math.round(num));
+  const formatCurrency = (num: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(num);
+  const formatPct = (num: number) => `${num.toFixed(1)}%`;
 
-  // Determinar altura del gráfico según el valor máximo de costos
-  const chartHeight = 220;
+  const dateRangeLabel = formatDateRangeLabel(stats.startDate, stats.endDate);
   const maxCompareCost = Math.max(...modelComparisons.map(m => m.totalCost), 1);
+  const bestVsActive = bestModel && bestModel.id !== activeModel.id
+    ? dynamicCosts.overall - bestModel.totalCost
+    : 0;
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isModelModalOpen) {
+        handleCancelEdit();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModelModalOpen]);
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans p-4 md:p-8 selection:bg-cyan-500 selection:text-slate-900">
@@ -427,11 +646,15 @@ export default function App() {
       <header className="max-w-full mx-auto mb-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-800/60 backdrop-blur-md p-6 rounded-3xl border border-slate-700/60 shadow-xl">
           <div>
-            <div className="flex items-center gap-3 mb-1">
+            <div className="flex flex-wrap items-center gap-3 mb-1">
               <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 font-bold text-xs rounded-full uppercase tracking-wider">
                 Consumos Reales de CSV
               </span>
-              <span className="text-xs text-slate-400 font-mono">Simulación Mayo - Junio 2026</span>
+              <span className="text-xs text-slate-400 font-mono">
+                {stats.startDate
+                  ? `${dateRangeLabel} · ${stats.spanDays} días · ${stats.activeDays} con uso`
+                  : 'Sin datos cargados'}
+              </span>
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight text-white bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-400 bg-clip-text text-transparent">
               Calculadora de Costos & Tokens de IA
@@ -454,17 +677,171 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="max-w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* COLUMNA IZQUIERDA: Tarjetas de Resumen & Gráfico (8 de 12 columnas) */}
-        <div className="lg:col-span-8 flex flex-col gap-8">
+        {/* COLUMNA IZQUIERDA ampliada (9 de 12) */}
+        <div className="lg:col-span-9 flex flex-col gap-6">
+
+          {/* VS 3-way: Modelo A vs Modelo B vs Cursor */}
+          <section className="bg-slate-800/50 p-5 md:p-6 rounded-3xl border border-slate-700/70 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-5">
+              <div>
+                <h3 className="text-lg font-bold text-white">Comparativa directa</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Dos modelos API (proyección /mes) contra un plan Cursor. Gana el más barato.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <label className="flex items-center gap-1.5 text-slate-400">
+                  <span className="text-cyan-400 font-semibold">A</span>
+                  <select
+                    value={vsModelAId}
+                    onChange={(e) => setVsModelAId(e.target.value)}
+                    className="bg-slate-900 border border-slate-600 text-slate-200 rounded-lg px-2 py-1.5 max-w-[160px] focus:outline-none focus:border-cyan-500"
+                  >
+                    {models.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <span className="text-slate-600 font-bold">VS</span>
+                <label className="flex items-center gap-1.5 text-slate-400">
+                  <span className="text-violet-400 font-semibold">B</span>
+                  <select
+                    value={vsModelBId}
+                    onChange={(e) => setVsModelBId(e.target.value)}
+                    className="bg-slate-900 border border-slate-600 text-slate-200 rounded-lg px-2 py-1.5 max-w-[160px] focus:outline-none focus:border-violet-500"
+                  >
+                    {models.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <span className="text-slate-600 font-bold">VS</span>
+                <label className="flex items-center gap-1.5 text-slate-400">
+                  <span className="text-amber-400 font-semibold">Plan</span>
+                  <select
+                    value={cursorPlanId}
+                    onChange={(e) => setCursorPlanId(e.target.value)}
+                    className="bg-slate-900 border border-slate-600 text-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500"
+                  >
+                    {CURSOR_PLANS.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} (${p.price})</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {threeWayCompare.contenders.map((c) => {
+                const isWinner = threeWayCompare.winnerKeys.includes(c.key);
+                const accent =
+                  c.key === 'a' ? 'cyan' : c.key === 'b' ? 'violet' : 'amber';
+                const borderCls = isWinner
+                  ? accent === 'cyan'
+                    ? 'border-cyan-400/70 bg-cyan-500/10'
+                    : accent === 'violet'
+                      ? 'border-violet-400/70 bg-violet-500/10'
+                      : 'border-amber-400/70 bg-amber-500/10'
+                  : 'border-slate-700/60 bg-slate-900/40';
+                const priceCls = isWinner
+                  ? accent === 'cyan'
+                    ? 'text-cyan-300'
+                    : accent === 'violet'
+                      ? 'text-violet-300'
+                      : 'text-amber-300'
+                  : 'text-white';
+
+                return (
+                  <div
+                    key={c.key}
+                    className={`relative rounded-2xl border p-4 transition-all ${borderCls}`}
+                  >
+                    {isWinner && (
+                      <span className="absolute -top-2.5 left-3 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950">
+                        Gana
+                      </span>
+                    )}
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+                      {c.kind === 'plan' ? 'Suscripción' : `Modelo ${c.key.toUpperCase()} · API`}
+                    </div>
+                    <div className="text-sm font-semibold text-slate-200 truncate" title={c.label}>
+                      {c.label}
+                    </div>
+                    <div className={`mt-3 text-2xl font-extrabold font-mono ${priceCls}`}>
+                      {formatCurrency(c.monthly)}
+                      <span className="text-xs font-sans font-normal text-slate-500 ml-1">/mes</span>
+                    </div>
+                    {c.kind === 'api' && (
+                      <p className="text-[10px] text-slate-500 mt-1 font-mono">
+                        período CSV: {formatCurrency(c.periodCost)}
+                      </p>
+                    )}
+                    {c.kind === 'plan' && (
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        precio fijo del plan
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="text-[10px] text-slate-500 mt-3 leading-relaxed">
+              * Las APIs se proyectan a 30 días con el ritmo de tu CSV. El plan Cursor es fijo; no incluye extras ni límites de uso reales.
+            </p>
+          </section>
+
+          {/* Costo del modelo activo (compacto) */}
+          <section className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-5 rounded-3xl border border-cyan-500/25 shadow-xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <span className="text-xs text-cyan-400 font-medium uppercase tracking-wider">Costo proyectado · modelo activo</span>
+                <h2 className="text-sm text-slate-300 mt-0.5 font-semibold">{activeModel.name}</h2>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-extrabold text-white font-mono tracking-tight">
+                  {formatCurrency(dynamicCosts.overall)}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  ~{formatCurrency(dynamicCosts.monthlyProjection)}/mes · {formatNum(stats.totalTokens)} tokens
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-xs font-mono">
+              <div className="bg-slate-950/40 rounded-xl px-3 py-2 border border-slate-700/50">
+                <span className="block text-cyan-400 font-semibold text-[10px]">Input</span>
+                <span className="text-white font-bold">{formatCurrency(dynamicCosts.breakdown.inputCost)}</span>
+              </div>
+              <div className="bg-slate-950/40 rounded-xl px-3 py-2 border border-slate-700/50">
+                <span className="block text-indigo-400 font-semibold text-[10px]">Output</span>
+                <span className="text-white font-bold">{formatCurrency(dynamicCosts.breakdown.outputCost)}</span>
+              </div>
+              <div className="bg-slate-950/40 rounded-xl px-3 py-2 border border-slate-700/50">
+                <span className="block text-amber-400 font-semibold text-[10px]">Cache</span>
+                <span className="text-white font-bold">{formatCurrency(dynamicCosts.breakdown.cacheCost)}</span>
+              </div>
+            </div>
+            {dynamicCosts.breakdown.cacheSavings > 0 && (
+              <p className="mt-2 text-[11px] text-amber-300/90">
+                Ahorro por cache vs input full: <strong>{formatCurrency(dynamicCosts.breakdown.cacheSavings)}</strong>
+                {bestVsActive > 0.0001 && (
+                  <span className="text-slate-400"> · vs óptimo +{formatCurrency(bestVsActive)}</span>
+                )}
+              </p>
+            )}
+          </section>
           
           {/* Grid de Métricas Generales */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-5">
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
             
-            <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all shadow-md">
+            <div className="bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all shadow-md sm:col-span-2 xl:col-span-2">
               <div className="flex justify-between items-start mb-2">
-                <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Historial Total</span>
+                <div>
+                  <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Historial Total</span>
+                  <p className="text-[10px] text-slate-500 font-mono mt-0.5">{dateRangeLabel}</p>
+                </div>
                 <span className="p-1.5 bg-blue-500/10 text-blue-400 rounded-lg text-xs">📈</span>
               </div>
               <div className="text-2xl font-bold text-white font-mono">{formatNum(stats.totalTokens)}</div>
@@ -472,45 +849,70 @@ export default function App() {
               
               <div className="mt-3 pt-3 border-t border-slate-700/60 grid grid-cols-3 gap-1 text-[10px] text-slate-400 font-mono">
                 <div>
-                  <span className="block text-cyan-400 font-semibold">IN:</span>
+                  <span className="block text-cyan-400 font-semibold">IN · {formatPct(stats.inputPct)}</span>
                   {formatNum(stats.totalInput)}
                 </div>
                 <div>
-                  <span className="block text-indigo-400 font-semibold">OUT:</span>
+                  <span className="block text-indigo-400 font-semibold">OUT · {formatPct(stats.outputPct)}</span>
                   {formatNum(stats.totalOutput)}
                 </div>
                 <div>
-                  <span className="block text-amber-400 font-semibold">CACHE:</span>
+                  <span className="block text-amber-400 font-semibold">CACHE · {formatPct(stats.cachePct)}</span>
                   {formatNum(stats.totalCache)}
                 </div>
               </div>
+
+              <div className="mt-3 h-2 rounded-full overflow-hidden flex bg-slate-900/80">
+                <div className="bg-cyan-500" style={{ width: `${stats.inputPct}%` }} title={`Input ${formatPct(stats.inputPct)}`} />
+                <div className="bg-indigo-500" style={{ width: `${stats.outputPct}%` }} title={`Output ${formatPct(stats.outputPct)}`} />
+                <div className="bg-amber-500" style={{ width: `${stats.cachePct}%` }} title={`Cache ${formatPct(stats.cachePct)}`} />
+              </div>
+              <p className="text-[10px] text-amber-300/80 mt-2">
+                Cache = {formatPct(stats.cachePct)} del volumen — el precio de cache define gran parte del ranking.
+              </p>
             </div>
 
-            <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all shadow-md">
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Últimos 30 Días</span>
-                <span className="p-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg text-xs">📆</span>
-              </div>
-              <div className="text-2xl font-bold text-white font-mono">{formatNum(stats.last30Tokens)}</div>
-              <div className="text-xs text-slate-400 mt-1">tokens en la ventana activa</div>
+            {!stats.last30CoversAll ? (
+              <div className="bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all shadow-md">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Últimos 30 Días</span>
+                  <span className="p-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg text-xs">📆</span>
+                </div>
+                <div className="text-2xl font-bold text-white font-mono">{formatNum(stats.last30Tokens)}</div>
+                <div className="text-xs text-slate-400 mt-1">tokens en la ventana activa</div>
 
-              <div className="mt-3 pt-3 border-t border-slate-700/60 grid grid-cols-3 gap-1 text-[10px] text-slate-400 font-mono">
-                <div>
-                  <span className="block text-cyan-400 font-semibold">IN:</span>
-                  {formatNum(stats.last30Input)}
-                </div>
-                <div>
-                  <span className="block text-indigo-400 font-semibold">OUT:</span>
-                  {formatNum(stats.last30Output)}
-                </div>
-                <div>
-                  <span className="block text-amber-400 font-semibold">CACHE:</span>
-                  {formatNum(stats.last30Cache)}
+                <div className="mt-3 pt-3 border-t border-slate-700/60 grid grid-cols-3 gap-1 text-[10px] text-slate-400 font-mono">
+                  <div>
+                    <span className="block text-cyan-400 font-semibold">IN:</span>
+                    {formatNum(stats.last30Input)}
+                  </div>
+                  <div>
+                    <span className="block text-indigo-400 font-semibold">OUT:</span>
+                    {formatNum(stats.last30Output)}
+                  </div>
+                  <div>
+                    <span className="block text-amber-400 font-semibold">CACHE:</span>
+                    {formatNum(stats.last30Cache)}
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all shadow-md">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Ventana del CSV</span>
+                  <span className="p-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg text-xs">📆</span>
+                </div>
+                <div className="text-2xl font-bold text-white font-mono">{stats.spanDays} días</div>
+                <div className="text-xs text-slate-400 mt-1">
+                  El dataset cabe en ≤30 días: historial y “últimos 30” son el mismo período.
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-700/60 text-[11px] text-slate-400">
+                  <span className="text-slate-300 font-semibold">{stats.activeDays}</span> días con consumo
+                </div>
+              </div>
+            )}
 
-            <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all shadow-md">
+            <div className="bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all shadow-md">
               <div className="flex justify-between items-start mb-1">
                 <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Día Más Caro</span>
                 <span className="p-1.5 bg-rose-500/10 text-rose-400 rounded-lg text-xs">🔥</span>
@@ -523,7 +925,7 @@ export default function App() {
               <div className="text-[10px] text-cyan-400/80 italic mt-0.5 font-mono">Calculado con {activeModel.name}</div>
             </div>
 
-            <div className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all shadow-md">
+            <div className="bg-slate-800/40 p-4 rounded-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all shadow-md">
               <div className="flex justify-between items-start mb-1">
                 <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Semana Más Cara</span>
                 <span className="p-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs">⚡</span>
@@ -709,7 +1111,8 @@ export default function App() {
                   </tr>
                   <tr className="hover:bg-slate-700/20 transition-colors bg-slate-800/20">
                     <td className="px-6 py-4 font-semibold text-white flex items-center gap-2">
-                      <span className="text-cyan-400 text-base">📅</span> Últimos 30 Días
+                      <span className="text-cyan-400 text-base">📅</span>
+                      {stats.last30CoversAll ? 'Ventana del CSV (≤30 días)' : 'Últimos 30 Días'}
                     </td>
                     <td className="px-6 py-4 text-right font-mono text-slate-300">{formatNum(stats.last30Input)}</td>
                     <td className="px-6 py-4 text-right font-mono text-slate-300">{formatNum(stats.last30Output)}</td>
@@ -742,14 +1145,115 @@ export default function App() {
 
         </div>
 
-        {/* COLUMNA DERECHA: Gestión de Modelos (4 de 12 columnas) */}
-        <div className="lg:col-span-4 flex flex-col gap-8">
+        {/* COLUMNA DERECHA más angosta (3 de 12) */}
+        <div className="lg:col-span-3 flex flex-col gap-4">
           
-          {/* Panel de Formulario / Agregar y Editar Modelos */}
-          <section className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700/70 shadow-xl">
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <span>🛠️</span> {isEditing ? 'Editar Modelo' : 'Agregar Nuevo Modelo'}
-            </h3>
+          {/* Lista Interactiva de Modelos */}
+          <section className="bg-slate-800/50 p-4 rounded-3xl border border-slate-700/70 shadow-xl flex-1 flex flex-col min-h-0">
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-base font-bold text-white">Modelos</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Click = activo · editar / borrar a la derecha
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={openAddModelModal}
+                className="shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-xl bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition-colors"
+              >
+                + Nuevo
+              </button>
+            </div>
+
+            <div className="space-y-1.5 overflow-y-auto max-h-[min(70vh,720px)] pr-0.5 flex-1">
+              {models.map((model) => {
+                const isSelected = model.id === selectedModelId;
+                const isCheapest = model.id === bestModel?.id;
+                const totalCost = calculateCost(stats.totalInput, stats.totalOutput, stats.totalCache, model);
+
+                return (
+                  <div 
+                    key={model.id}
+                    onClick={() => setSelectedModelId(model.id)}
+                    className={`px-2.5 py-2 rounded-xl border transition-all cursor-pointer ${
+                      isSelected 
+                        ? 'bg-slate-800 border-cyan-500/70' 
+                        : 'bg-slate-900/40 border-slate-700/50 hover:border-slate-600'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <h4 className={`font-semibold text-xs truncate ${isSelected ? 'text-cyan-300' : 'text-slate-200'}`}>
+                            {model.name}
+                          </h4>
+                          {isCheapest && (
+                            <span className="shrink-0 text-[8px] font-bold text-emerald-400 bg-emerald-500/10 px-1 py-px rounded border border-emerald-500/20">
+                              OPT
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 mt-0.5">
+                          <span className="text-[9px] font-mono text-slate-500 truncate">
+                            ${model.inputPrice}/{model.outputPrice}/{model.cachePrice}
+                          </span>
+                          <strong className={`text-[11px] font-mono shrink-0 ${isCheapest ? 'text-emerald-400' : 'text-slate-300'}`}>
+                            {formatCurrency(totalCost)}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          onClick={() => handleEditClick(model)}
+                          title="Editar"
+                          className="p-0.5 text-[11px] text-slate-500 hover:text-cyan-400 transition-colors"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteModel(model.id, model.name)}
+                          title="Eliminar"
+                          className="p-0.5 text-[11px] text-slate-500 hover:text-rose-400 transition-colors"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+        </div>
+
+      </main>
+
+      {/* Modal Agregar / Editar Modelo */}
+      {isModelModalOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm"
+          onClick={handleCancelEdit}
+        >
+          <div
+            className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-white">
+                {isEditing ? 'Editar Modelo' : 'Agregar Nuevo Modelo'}
+              </h3>
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="text-slate-400 hover:text-white text-xl leading-none px-2"
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
 
             <form onSubmit={handleAddOrUpdateModel} className="space-y-4">
               <div>
@@ -761,64 +1265,68 @@ export default function App() {
                   value={modelForm.name}
                   onChange={(e) => setModelForm(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Ej. GPT-4o, Custom Fine-Tuned"
-                  className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 text-slate-100 rounded-xl px-4 py-2.5 text-sm transition-all focus:outline-none"
+                  autoFocus
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 text-slate-100 rounded-xl px-4 py-2.5 text-sm transition-all focus:outline-none"
                 />
               </div>
 
               <div>
                 <label className="block text-xs text-slate-400 font-mono uppercase tracking-wider mb-1">
-                  Costo de Input por 1M de Tokens (USD)
+                  Input / 1M tokens (USD)
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-2.5 text-slate-500 font-mono text-sm">$</span>
                   <input 
-                    type="number" 
-                    step="0.000001"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
                     value={modelForm.inputPrice}
-                    onChange={(e) => setModelForm(prev => ({ ...prev, inputPrice: parseFloat(e.target.value) || 0 }))}
+                    onChange={(e) => handlePriceFieldChange('inputPrice', e.target.value)}
+                    onFocus={(e) => e.target.select()}
                     placeholder="2.50"
-                    className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 text-slate-100 rounded-xl pl-8 pr-4 py-2.5 text-sm transition-all focus:outline-none font-mono"
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 text-slate-100 rounded-xl pl-8 pr-4 py-2.5 text-sm transition-all focus:outline-none font-mono"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs text-slate-400 font-mono uppercase tracking-wider mb-1">
-                  Costo de Output por 1M de Tokens (USD)
+                  Output / 1M tokens (USD)
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-2.5 text-slate-500 font-mono text-sm">$</span>
                   <input 
-                    type="number" 
-                    step="0.000001"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
                     value={modelForm.outputPrice}
-                    onChange={(e) => setModelForm(prev => ({ ...prev, outputPrice: parseFloat(e.target.value) || 0 }))}
+                    onChange={(e) => handlePriceFieldChange('outputPrice', e.target.value)}
+                    onFocus={(e) => e.target.select()}
                     placeholder="10.00"
-                    className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 text-slate-100 rounded-xl pl-8 pr-4 py-2.5 text-sm transition-all focus:outline-none font-mono"
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 text-slate-100 rounded-xl pl-8 pr-4 py-2.5 text-sm transition-all focus:outline-none font-mono"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs text-slate-400 font-mono uppercase tracking-wider mb-1">
-                  Costo de Cache Read por 1M de Tokens (USD)
+                  Cache Read / 1M tokens (USD)
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-2.5 text-slate-500 font-mono text-sm">$</span>
                   <input 
-                    type="number" 
-                    step="0.000001"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
                     value={modelForm.cachePrice}
-                    onChange={(e) => setModelForm(prev => ({ ...prev, cachePrice: parseFloat(e.target.value) || 0 }))}
+                    onChange={(e) => handlePriceFieldChange('cachePrice', e.target.value)}
+                    onFocus={(e) => e.target.select()}
                     placeholder="1.25"
-                    className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 text-slate-100 rounded-xl pl-8 pr-4 py-2.5 text-sm transition-all focus:outline-none font-mono"
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 text-slate-100 rounded-xl pl-8 pr-4 py-2.5 text-sm transition-all focus:outline-none font-mono"
                   />
                 </div>
                 <span className="text-[10px] text-slate-500 block mt-1">
-                  * Tarifas habituales de lectura rápida o lectura cached de la API.
+                  Acepta punto o coma (0.15 / 0,15).
                 </span>
               </div>
 
@@ -829,124 +1337,18 @@ export default function App() {
                 >
                   {isEditing ? 'Guardar Cambios' : 'Agregar a la Lista'}
                 </button>
-                {isEditing && (
-                  <button 
-                    type="button" 
-                    onClick={handleCancelEdit}
-                    className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold px-4 py-2.5 rounded-xl text-sm transition-all"
-                  >
-                    Cancelar
-                  </button>
-                )}
+                <button 
+                  type="button" 
+                  onClick={handleCancelEdit}
+                  className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold px-4 py-2.5 rounded-xl text-sm transition-all"
+                >
+                  Cancelar
+                </button>
               </div>
             </form>
-          </section>
-
-          {/* Lista Interactiva de Modelos Activos */}
-          <section className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700/70 shadow-xl flex-1 flex flex-col">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <span>🤖</span> Modelos Preconfigurados
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Selecciona un modelo de la lista para analizar su costo contra tus datos de uso.
-              </p>
-            </div>
-
-            <div className="space-y-3 overflow-y-auto max-h-[380px] pr-1 flex-1">
-              {models.map((model) => {
-                const isSelected = model.id === selectedModelId;
-                const isCheapest = model.id === bestModel?.id;
-
-                return (
-                  <div 
-                    key={model.id}
-                    onClick={() => setSelectedModelId(model.id)}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer relative ${
-                      isSelected 
-                        ? 'bg-slate-800 border-cyan-500/80 shadow-md shadow-cyan-500/5' 
-                        : 'bg-slate-900/50 border-slate-700/60 hover:bg-slate-800 hover:border-slate-600'
-                    }`}
-                  >
-                    
-                    {/* Indicador de Activo */}
-                    {isSelected && (
-                      <div className="absolute right-3 top-3 w-2 h-2 bg-cyan-400 rounded-full animate-ping"></div>
-                    )}
-
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className={`font-bold text-sm ${isSelected ? 'text-cyan-400' : 'text-slate-200'}`}>
-                          {model.name}
-                        </h4>
-                        
-                        {/* Badges de soporte */}
-                        <div className="flex gap-1.5 mt-1">
-                          {isCheapest && (
-                            <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                              Óptimo Costo
-                            </span>
-                          )}
-                          {isSelected && (
-                            <span className="text-[9px] font-semibold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
-                              Seleccionado
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Acciones para editar y eliminar */}
-                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <button 
-                          onClick={() => handleEditClick(model)}
-                          title="Editar precios"
-                          className="p-1 text-slate-400 hover:text-cyan-400 transition-colors"
-                        >
-                          ✏️
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteModel(model.id, model.name)}
-                          title="Eliminar de la lista"
-                          className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Desglose de Precios */}
-                    <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-800 text-[11px] font-mono text-slate-400">
-                      <div>
-                        <span className="block text-slate-500 font-sans text-[10px]">Input 1M</span>
-                        <strong className="text-slate-300">${model.inputPrice.toFixed(3)}</strong>
-                      </div>
-                      <div>
-                        <span className="block text-slate-500 font-sans text-[10px]">Output 1M</span>
-                        <strong className="text-slate-300">${model.outputPrice.toFixed(3)}</strong>
-                      </div>
-                      <div>
-                        <span className="block text-slate-500 font-sans text-[10px]">Cache 1M</span>
-                        <strong className="text-slate-300">${model.cachePrice.toFixed(3)}</strong>
-                      </div>
-                    </div>
-
-                    {/* Costo final estimado del volumen actual */}
-                    <div className="mt-3 bg-slate-950/40 p-2 rounded-xl flex justify-between items-center text-[11px] font-mono border border-slate-800/60">
-                      <span className="text-slate-400 font-sans">Gasto Total:</span>
-                      <strong className={isCheapest ? 'text-emerald-400' : 'text-slate-300'}>
-                        {formatCurrency(calculateCost(stats.totalInput, stats.totalOutput, stats.totalCache, model))}
-                      </strong>
-                    </div>
-
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
+          </div>
         </div>
-
-      </main>
+      )}
 
       {/* Footer corporativo */}
       <footer className="max-w-full mx-auto mt-12 pt-6 border-t border-slate-800 text-center text-xs text-slate-500">
