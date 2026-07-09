@@ -1,1 +1,36 @@
 @import "tailwindcss";
+
+@theme {
+  --font-geist: "Geist", sans-serif;
+  --font-jakarta: "Plus Jakarta Sans", sans-serif;
+  --color-oled: #050505;
+  --ease-premium: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@layer base {
+  body {
+    @apply bg-oled text-slate-100 font-geist selection:bg-cyan-500/30 selection:text-cyan-200;
+    background-image: 
+      radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.03) 0%, transparent 40%),
+      radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.03) 0%, transparent 40%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .double-bezel-shell {
+    @apply bg-white/5 ring-1 ring-white/10 p-2 rounded-[2rem] transition-all duration-700 ease-premium;
+  }
+  
+  .double-bezel-core {
+    @apply bg-oled/60 backdrop-blur-xl rounded-[calc(2rem-0.5rem)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] border border-white/5 h-full;
+  }
+
+  .island-button {
+    @apply rounded-full px-6 py-3 bg-white/10 hover:bg-white/15 ring-1 ring-white/20 hover:ring-white/30 text-white font-semibold transition-all duration-500 ease-premium flex items-center gap-2 group active:scale-[0.98];
+  }
+
+  .button-icon-wrapper {
+    @apply w-8 h-8 rounded-full bg-white/10 flex items-center justify-center transition-all duration-500 ease-premium group-hover:translate-x-1 group-hover:-translate-y-[1px] group-hover:scale-110 group-hover:bg-white/20;
+  }
+}
