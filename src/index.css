@@ -5,15 +5,21 @@
   --font-jakarta: "Plus Jakarta Sans", sans-serif;
   --color-oled: #050505;
   --ease-premium: cubic-bezier(0.32, 0.72, 0, 1);
+  --z-modal: 100;
+  --z-toast: 150;
 }
 
 @layer base {
   body {
-    @apply bg-oled text-slate-100 font-geist selection:bg-cyan-500/30 selection:text-cyan-200;
+    @apply bg-oled text-slate-300 font-jakarta selection:bg-cyan-500/30 selection:text-cyan-200 antialiased;
     background-image: 
       radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.03) 0%, transparent 40%),
       radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.03) 0%, transparent 40%);
     background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-mono, .font-geist {
+    @apply font-geist;
   }
 }
 
@@ -23,7 +29,7 @@
   }
   
   .double-bezel-core {
-    @apply bg-oled/60 backdrop-blur-xl rounded-[calc(2rem-0.5rem)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] border border-white/5 h-full;
+    @apply bg-oled/60 rounded-[calc(2rem-0.5rem)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] border border-white/5 h-full;
   }
 
   .island-button {

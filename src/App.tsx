@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
+
+const premiumEase = [0.32, 0.72, 0, 1] as const;
 
 // Datos agregados del CSV original proveído por el usuario
 const INITIAL_CSV_DATA = [
@@ -632,15 +634,16 @@ export default function App() {
     }
   };
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20, scale: 0.98 },
+  const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 20, scale: 0.98, filter: 'blur(8px)' },
     visible: {
       opacity: 1,
       y: 0,
       scale: 1,
+      filter: 'blur(0px)',
       transition: {
         duration: 0.8,
-        ease: [0.32, 0.72, 0, 1]
+        ease: premiumEase
       }
     }
   };
@@ -663,18 +666,27 @@ export default function App() {
       className="min-h-screen p-4 md:p-8"
     >
       
-      {/* Alerta de Notificaciones */}
       <AnimatePresence>
         {notification && (
           <motion.div 
-            initial={{ opacity: 0, y: -20, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className={`fixed top-5 right-5 z-[150] flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl transition-all duration-700 ease-premium transform ${
+            initial={{ opacity: 0, y: -20, scale: 0.9, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, scale: 0.9, filter: 'blur(4px)' }}
+            className={`fixed top-5 right-5 z-[var(--z-toast)] flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl transition-all duration-700 ease-premium transform ${
               notification.type === 'error' ? 'bg-rose-500/90 backdrop-blur-md text-white' : 'bg-emerald-500/90 backdrop-blur-md text-white'
             }`}
           >
-            <span className="text-lg">{notification.type === 'error' ? '⚠️' : '✅'}</span>
+            <span className="text-lg">
+              {notification.type === 'error' ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </span>
             <span className="font-bold text-sm tracking-tight">{notification.message}</span>
           </motion.div>
         )}
@@ -876,7 +888,11 @@ export default function App() {
 
               {dynamicCosts.breakdown.cacheSavings > 0 && (
                 <div className="mt-6 flex items-center gap-3 px-4 py-3 bg-amber-500/10 rounded-2xl border border-amber-500/20">
-                  <span className="text-xl">💎</span>
+                  <span className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-400">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </span>
                   <p className="text-xs text-amber-200/80 font-medium">
                     Eficiencia de Cache: Has ahorrado <strong className="text-amber-300">{formatCurrency(dynamicCosts.breakdown.cacheSavings)}</strong> vs procesamiento full input.
                     {bestVsActive > 0.0001 && (
@@ -900,7 +916,9 @@ export default function App() {
                     <p className="text-xs text-cyan-400/80 font-mono mt-1">{dateRangeLabel}</p>
                   </div>
                   <div className="w-10 h-10 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 ring-1 ring-blue-500/20 shadow-lg shadow-blue-500/10">
-                    📈
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
                   </div>
                 </div>
                 
@@ -940,7 +958,9 @@ export default function App() {
                     {stats.last30CoversAll ? 'Ventana CSV' : 'Últimos 30 Días'}
                   </span>
                   <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 flex items-center justify-center text-cyan-400 ring-1 ring-cyan-500/20 shadow-lg shadow-cyan-500/10">
-                    📆
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
                   </div>
                 </div>
                 
@@ -978,7 +998,10 @@ export default function App() {
                 <div className="flex justify-between items-start mb-6">
                   <span className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">Pico de Gasto</span>
                   <div className="w-10 h-10 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-400 ring-1 ring-rose-500/20 shadow-lg shadow-rose-500/10">
-                    🔥
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.99 7.99 0 0120 13a7.99 7.99 0 01-2.343 5.657z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14l2.828.828" />
+                    </svg>
                   </div>
                 </div>
                 
@@ -1001,7 +1024,9 @@ export default function App() {
                 <div className="flex justify-between items-start mb-6">
                   <span className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">Semana Pico</span>
                   <div className="w-10 h-10 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-400 ring-1 ring-purple-500/20 shadow-lg shadow-purple-500/10">
-                    ⚡
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
                   </div>
                 </div>
                 
@@ -1026,7 +1051,10 @@ export default function App() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
                 <div>
                   <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                    <span>📊</span> Comparativa de Gasto Real
+                    <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Comparativa de Gasto Real
                   </h3>
                   <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-medium">
                     Proyección del gasto total acumulado en dólares
@@ -1036,7 +1064,9 @@ export default function App() {
                 {bestModel && (
                   <div className="island-button bg-emerald-500/10 text-emerald-400 ring-emerald-500/20 hover:bg-emerald-500/20">
                     <div className="button-icon-wrapper bg-emerald-500/20">
-                      <span className="animate-pulse">✨</span>
+                      <svg className="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" />
+                      </svg>
                     </div>
                     <span className="text-[10px] font-bold uppercase tracking-wider">Óptimo: {bestModel.name}</span>
                   </div>
@@ -1146,7 +1176,10 @@ export default function App() {
               <div className="p-6 md:p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                    <span>💵</span> Proyección: <span className="text-cyan-400">{activeModel.name}</span>
+                    <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Proyección: <span className="text-cyan-400">{activeModel.name}</span>
                   </h3>
                   <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-medium">
                     Desglose financiero por períodos
@@ -1173,7 +1206,11 @@ export default function App() {
                   <tbody className="divide-y divide-white/5">
                     <tr className="group hover:bg-white/[0.02] transition-colors">
                       <td className="px-8 py-6 font-bold text-white flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400 text-xs">🌐</span>
+                        <span className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                          </svg>
+                        </span>
                         Historial Total
                       </td>
                       <td className="px-8 py-6 text-right font-mono text-slate-400 group-hover:text-slate-200 transition-colors">{formatNum(stats.totalInput)}</td>
@@ -1185,7 +1222,11 @@ export default function App() {
                     </tr>
                     <tr className="group hover:bg-white/[0.02] transition-colors bg-white/[0.01]">
                       <td className="px-8 py-6 font-bold text-white flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400 text-xs">📅</span>
+                        <span className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </span>
                         {stats.last30CoversAll ? 'Ventana CSV' : 'Últimos 30 Días'}
                       </td>
                       <td className="px-8 py-6 text-right font-mono text-slate-400 group-hover:text-slate-200 transition-colors">{formatNum(stats.last30Input)}</td>
@@ -1197,7 +1238,11 @@ export default function App() {
                     </tr>
                     <tr className="group hover:bg-white/[0.02] transition-colors">
                       <td className="px-8 py-6 font-bold text-slate-300 flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-400 text-xs">🔥</span>
+                        <span className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-400">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.99 7.99 0 0120 13a7.99 7.99 0 01-2.343 5.657z" />
+                          </svg>
+                        </span>
                         Pico Diario ({mostExpensiveDay.date})
                       </td>
                       <td className="px-8 py-6 text-right font-mono text-slate-500 group-hover:text-slate-400 transition-colors">
@@ -1280,24 +1325,26 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="flex flex-col gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                          <button 
-                            onClick={() => handleEditClick(model)}
-                            className="p-1 text-slate-500 hover:text-white transition-colors"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                            </svg>
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteModel(model.id, model.name)}
-                            className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
+                      <div className="flex flex-col gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          onClick={() => handleEditClick(model)}
+                          title="Editar"
+                          className="p-1 text-slate-500 hover:text-cyan-400 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteModel(model.id, model.name)}
+                          title="Eliminar"
+                          className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                       </div>
                     </div>
                   );

@@ -118,3 +118,4 @@ dist/
 dist-ssr/
 *.local
 .cursor/
+skills-lock.json
