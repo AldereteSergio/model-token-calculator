@@ -132,6 +132,7 @@ export default function App() {
   const [vsModelBId, setVsModelBId] = useState('9'); // deepseek-v4-flash por defecto
   const [cursorPlanId, setCursorPlanId] = useState('pro');
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
+  const [chartMode, setChartMode] = useState<'models' | 'trends'>('models');
   
   // Referencias y estados para el scroll por arrastre horizontal del gráfico de comparación
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -617,6 +618,20 @@ export default function App() {
   const formatPct = (num: number) => `${num.toFixed(1)}%`;
 
   const dateRangeLabel = formatDateRangeLabel(stats.startDate, stats.endDate);
+  
+  // Datos para el gráfico de tendencias (Area Chart)
+  const trendData = useMemo(() => {
+    if (csvData.length === 0) return [];
+    return csvData.map(d => ({
+      date: d.date,
+      cost: calculateCost(d.input, d.output, d.cache, activeModel),
+      inputCost: (d.input / 1000000) * activeModel.inputPrice,
+      outputCost: (d.output / 1000000) * activeModel.outputPrice,
+      cacheCost: (d.cache / 1000000) * activeModel.cachePrice,
+    }));
+  }, [csvData, activeModel]);
+
+  const maxTrendCost = Math.max(...trendData.map(d => d.cost), 0.01);
   const maxCompareCost = Math.max(...modelComparisons.map(m => m.totalCost), 1);
   const bestVsActive = bestModel && bestModel.id !== activeModel.id
     ? dynamicCosts.overall - bestModel.totalCost
@@ -1057,11 +1072,43 @@ export default function App() {
                     Comparativa de Gasto Real
                   </h3>
                   <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-medium">
-                    Proyección del gasto total acumulado en dólares
+                    {chartMode === 'models' ? 'Proyección del gasto total acumulado en dólares' : 'Evolución del gasto diario con el modelo activo'}
                   </p>
+                  {chartMode === 'models' && (
+                    <div className="flex items-center gap-4 mt-3">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Input</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Output</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Cache</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {bestModel && (
+                <div className="flex items-center gap-3">
+                  <div className="flex bg-white/5 p-1 rounded-full ring-1 ring-white/10">
+                    <button 
+                      onClick={() => setChartMode('models')}
+                      className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${chartMode === 'models' ? 'bg-cyan-500 text-cyan-950 shadow-lg shadow-cyan-500/20' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                      Modelos
+                    </button>
+                    <button 
+                      onClick={() => setChartMode('trends')}
+                      className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${chartMode === 'trends' ? 'bg-cyan-500 text-cyan-950 shadow-lg shadow-cyan-500/20' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                      Tendencia
+                    </button>
+                  </div>
+
+                  {bestModel && chartMode === 'models' && (
                   <div className="island-button bg-emerald-500/10 text-emerald-400 ring-emerald-500/20 hover:bg-emerald-500/20">
                     <div className="button-icon-wrapper bg-emerald-500/20">
                       <svg className="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1080,12 +1127,12 @@ export default function App() {
                 <div className="h-[140px] mt-[30px] flex flex-col justify-between pointer-events-none select-none text-right pr-2 shrink-0">
                   {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
                     <span key={i} className="text-[10px] text-slate-500 font-mono w-14 block">
-                      {formatCurrency(maxCompareCost * (1 - ratio))}
+                      {formatCurrency((chartMode === 'models' ? maxCompareCost : maxTrendCost) * (1 - ratio))}
                     </span>
                   ))}
                 </div>
 
-                {/* Contenedor Deslizable de las Barras */}
+                {/* Contenedor Deslizable de las Barras / Area Chart */}
                 <div className="flex-1 relative overflow-hidden">
                   <div 
                     ref={scrollRef}
@@ -1096,8 +1143,8 @@ export default function App() {
                     className="overflow-x-auto scrollbar-none pb-2 cursor-grab active:cursor-grabbing select-none"
                   >
                     <div 
-                      style={{ minWidth: `${Math.max(modelComparisons.length * 85, 500)}px` }}
-                      className="relative z-10 flex justify-around items-end h-[220px] pt-4"
+                      style={{ minWidth: `${Math.max((chartMode === 'models' ? modelComparisons.length : trendData.length) * 85, 500)}px` }}
+                      className="relative z-10 flex justify-around items-end h-[220px] pt-4 px-4"
                     >
                       {/* Líneas Guía de Fondo */}
                       <div className="absolute inset-x-0 top-[30px] h-[140px] flex flex-col justify-between pointer-events-none">
@@ -1106,63 +1153,173 @@ export default function App() {
                         ))}
                       </div>
 
-                      {modelComparisons.map((model) => {
-                        const heightPercent = Math.max((model.totalCost / maxCompareCost) * 100, 3);
-                        const isSelected = model.id === selectedModelId;
-                        const isCheapest = model.id === bestModel?.id;
-
-                        return (
-                          <div 
-                            key={model.id} 
-                            className="group flex flex-col items-center flex-1 max-w-[80px] cursor-pointer"
-                            onClick={() => setSelectedModelId(model.id)}
+                      <AnimatePresence mode="wait">
+                        {chartMode === 'models' ? (
+                          <motion.div 
+                            key="models"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            transition={{ duration: 0.5, ease: premiumEase }}
+                            className="flex justify-around items-end w-full h-full"
                           >
-                            {/* Tooltip con desglose en hover */}
-                            <div className="absolute mb-[240px] opacity-0 group-hover:opacity-100 transition-all duration-500 ease-premium bg-oled/90 backdrop-blur-xl text-slate-200 text-[10px] p-3 rounded-2xl border border-white/10 shadow-2xl pointer-events-none z-50 text-center w-40 transform translate-y-2 group-hover:translate-y-0">
-                              <p className="font-bold border-b border-white/10 pb-2 mb-2 text-white">{model.name}</p>
-                              <div className="space-y-1 font-mono">
-                                <p className="flex justify-between"><span>IN:</span> <span>{formatCurrency((stats.totalInput / 1000000) * model.inputPrice)}</span></p>
-                                <p className="flex justify-between"><span>OUT:</span> <span>{formatCurrency((stats.totalOutput / 1000000) * model.outputPrice)}</span></p>
-                                <p className="flex justify-between"><span>CA:</span> <span>{formatCurrency((stats.totalCache / 1000000) * model.cachePrice)}</span></p>
-                              </div>
-                            </div>
+                            {modelComparisons.map((model) => {
+                              const totalCost = model.totalCost;
+                              const heightPercent = Math.max((totalCost / maxCompareCost) * 100, 3);
+                              const isSelected = model.id === selectedModelId;
+                              const isCheapest = model.id === bestModel?.id;
 
-                            {/* Contenedor de la Barra */}
-                            <div className="h-[140px] w-full flex items-end justify-center relative">
-                              <div 
-                                style={{ height: `${heightPercent}%` }}
-                                className={`w-10 sm:w-12 rounded-t-xl transition-all duration-700 ease-premium relative ${
-                                  isCheapest 
-                                    ? 'bg-gradient-to-t from-emerald-600 to-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]' 
-                                    : isSelected
-                                      ? 'bg-gradient-to-t from-cyan-600 to-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.2)]'
-                                      : 'bg-white/10 group-hover:bg-white/20'
-                                }`}
-                              >
-                                <span className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap text-[10px] font-black font-mono tracking-tighter transition-colors ${
-                                  isCheapest ? 'text-emerald-400' : isSelected ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-300'
-                                }`}>
-                                  {formatCurrency(model.totalCost)}
-                                </span>
-                              </div>
-                            </div>
+                              // Desglose para barras apiladas
+                              const inputH = (stats.totalInput / 1000000 * model.inputPrice / totalCost) * 100;
+                              const outputH = (stats.totalOutput / 1000000 * model.outputPrice / totalCost) * 100;
+                              const cacheH = (stats.totalCache / 1000000 * model.cachePrice / totalCost) * 100;
 
-                            <span className={`text-[9px] font-bold mt-3 text-center truncate w-full px-1 transition-colors uppercase tracking-wider ${
-                              isSelected ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-300'
-                            }`}>
-                              {model.name}
-                            </span>
+                              return (
+                                <div 
+                                  key={model.id} 
+                                  className="group flex flex-col items-center flex-1 max-w-[80px] cursor-pointer"
+                                  onClick={() => setSelectedModelId(model.id)}
+                                >
+                                  {/* Tooltip con desglose en hover */}
+                                  <div className="absolute mb-[240px] opacity-0 group-hover:opacity-100 transition-all duration-500 ease-premium bg-oled/90 backdrop-blur-xl text-slate-200 text-[10px] p-3 rounded-2xl border border-white/10 shadow-2xl pointer-events-none z-50 text-center w-40 transform translate-y-2 group-hover:translate-y-0">
+                                    <p className="font-bold border-b border-white/10 pb-2 mb-2 text-white">{model.name}</p>
+                                    <div className="space-y-1 font-mono">
+                                      <p className="flex justify-between"><span>IN:</span> <span>{formatCurrency((stats.totalInput / 1000000) * model.inputPrice)}</span></p>
+                                      <p className="flex justify-between"><span>OUT:</span> <span>{formatCurrency((stats.totalOutput / 1000000) * model.outputPrice)}</span></p>
+                                      <p className="flex justify-between"><span>CA:</span> <span>{formatCurrency((stats.totalCache / 1000000) * model.cachePrice)}</span></p>
+                                    </div>
+                                  </div>
+
+                                  {/* Contenedor de la Barra Apilada */}
+                                  <div className="h-[140px] w-full flex items-end justify-center relative">
+                                    <div 
+                                      style={{ height: `${heightPercent}%` }}
+                                      className={`w-10 sm:w-12 rounded-t-xl transition-all duration-700 ease-premium relative overflow-hidden flex flex-col-reverse ${
+                                        isCheapest 
+                                          ? 'ring-2 ring-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.2)]' 
+                                          : isSelected
+                                            ? 'ring-2 ring-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.2)]'
+                                            : 'ring-1 ring-white/10 group-hover:ring-white/20'
+                                      }`}
+                                    >
+                                      <div style={{ height: `${inputH}%` }} className="bg-cyan-500/80" title="Input" />
+                                      <div style={{ height: `${outputH}%` }} className="bg-indigo-500/80" title="Output" />
+                                      <div style={{ height: `${cacheH}%` }} className="bg-amber-500/80" title="Cache" />
+                                      
+                                      {/* Overlay de selección */}
+                                      <div className={`absolute inset-0 transition-opacity ${isSelected || isCheapest ? 'opacity-0' : 'opacity-20 bg-white/10 group-hover:opacity-0'}`} />
+                                    </div>
+                                    <span className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap text-[10px] font-black font-mono tracking-tighter transition-colors ${
+                                      isCheapest ? 'text-emerald-400' : isSelected ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-300'
+                                    }`}>
+                                      {formatCurrency(totalCost)}
+                                    </span>
+                                  </div>
+
+                                  <span className={`text-[9px] font-bold mt-3 text-center truncate w-full px-1 transition-colors uppercase tracking-wider ${
+                                    isSelected ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-300'
+                                  }`}>
+                                    {model.name}
+                                  </span>
+                                  
+                                  <div className="h-4 flex items-center justify-center mt-1">
+                                    {isCheapest && (
+                                      <span className="text-[7px] px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full font-black uppercase tracking-widest">
+                                        Óptimo
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </motion.div>
+                        ) : (
+                          <motion.div 
+                            key="trends"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            transition={{ duration: 0.5, ease: premiumEase }}
+                            className="w-full h-full pt-8"
+                          >
+                            <svg className="w-full h-[140px] overflow-visible" preserveAspectRatio="none">
+                              <defs>
+                                <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.3" />
+                                  <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+                                </linearGradient>
+                              </defs>
+                              
+                              {/* Generar Path del Area Chart */}
+                              {(() => {
+                                const points = trendData.map((d, i) => {
+                                  const x = (i / (trendData.length - 1)) * 100;
+                                  const y = 100 - (d.cost / maxTrendCost) * 100;
+                                  return `${x},${y}`;
+                                });
+                                
+                                const pathD = `M 0,100 L ${points.join(' L ')} L 100,100 Z`;
+                                const lineD = `M ${points.join(' L ')}`;
+                                
+                                return (
+                                  <>
+                                    <motion.path 
+                                      initial={{ pathLength: 0, opacity: 0 }}
+                                      animate={{ pathLength: 1, opacity: 1 }}
+                                      transition={{ duration: 1.5, ease: premiumEase }}
+                                      d={pathD} 
+                                      fill="url(#areaGradient)" 
+                                      className="origin-bottom"
+                                      vectorEffect="non-scaling-stroke"
+                                    />
+                                    <motion.path 
+                                      initial={{ pathLength: 0 }}
+                                      animate={{ pathLength: 1 }}
+                                      transition={{ duration: 1.5, ease: premiumEase }}
+                                      d={lineD} 
+                                      fill="none" 
+                                      stroke="#22d3ee" 
+                                      strokeWidth="3" 
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      vectorEffect="non-scaling-stroke"
+                                    />
+                                    
+                                    {/* Puntos de interacción (invisible para hover) */}
+                                    {trendData.map((d, i) => {
+                                      const x = `${(i / (trendData.length - 1)) * 100}%`;
+                                      const y = `${100 - (d.cost / maxTrendCost) * 100}%`;
+                                      return (
+                                        <g key={i} className="group/point">
+                                          <circle cx={x} cy={y} r="4" className="fill-cyan-400 opacity-0 group-hover/point:opacity-100 transition-opacity" />
+                                          <rect x={`calc(${x} - 20px)`} y="0" width="40" height="100%" className="fill-transparent cursor-crosshair" />
+                                          
+                                          {/* Tooltip temporal */}
+                                          <foreignObject x={`calc(${x} - 60px)`} y={`calc(${y} - 70px)`} width="120" height="60" className="opacity-0 group-hover/point:opacity-100 transition-opacity pointer-events-none">
+                                            <div className="bg-oled/90 backdrop-blur-md border border-white/10 p-2 rounded-xl text-center shadow-2xl">
+                                              <p className="text-[8px] text-slate-500 font-bold uppercase">{formatShortDate(d.date)}</p>
+                                              <p className="text-xs font-black text-cyan-400 font-mono">{formatCurrency(d.cost)}</p>
+                                            </div>
+                                          </foreignObject>
+                                        </g>
+                                      );
+                                    })}
+                                  </>
+                                );
+                              })()}
+                            </svg>
                             
-                            <div className="h-4 flex items-center justify-center mt-1">
-                              {isCheapest && (
-                                <span className="text-[7px] px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full font-black uppercase tracking-widest">
-                                  Óptimo
+                            {/* Eje X (Fechas) */}
+                            <div className="flex justify-between mt-4 px-2">
+                              {trendData.filter((_, i) => i % Math.ceil(trendData.length / 6) === 0 || i === trendData.length - 1).map((d, i) => (
+                                <span key={i} className="text-[9px] text-slate-600 font-bold uppercase tracking-tighter">
+                                  {formatShortDate(d.date)}
                                 </span>
-                              )}
+                              ))}
                             </div>
-                          </div>
-                        );
-                      })}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
                 </div>
