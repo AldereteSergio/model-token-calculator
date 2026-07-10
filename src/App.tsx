@@ -1109,15 +1109,16 @@ export default function App() {
                   </div>
 
                   {bestModel && chartMode === 'models' && (
-                  <div className="island-button bg-emerald-500/10 text-emerald-400 ring-emerald-500/20 hover:bg-emerald-500/20">
-                    <div className="button-icon-wrapper bg-emerald-500/20">
-                      <svg className="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" />
-                      </svg>
+                    <div className="island-button bg-emerald-500/10 text-emerald-400 ring-emerald-500/20 hover:bg-emerald-500/20">
+                      <div className="button-icon-wrapper bg-emerald-500/20">
+                        <svg className="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" />
+                        </svg>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Óptimo: {bestModel.name}</span>
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Óptimo: {bestModel.name}</span>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               {/* Visualización de Barras de Costo Custom SVG */}
@@ -1163,16 +1164,16 @@ export default function App() {
                             transition={{ duration: 0.5, ease: premiumEase }}
                             className="flex justify-around items-end w-full h-full"
                           >
-                            {modelComparisons.map((model) => {
-                              const totalCost = model.totalCost;
-                              const heightPercent = Math.max((totalCost / maxCompareCost) * 100, 3);
-                              const isSelected = model.id === selectedModelId;
-                              const isCheapest = model.id === bestModel?.id;
+                              {modelComparisons.map((model) => {
+                                const totalCost = Math.max(model.totalCost, 1e-9);
+                                const heightPercent = Math.max((model.totalCost / maxCompareCost) * 100, 3);
+                                const isSelected = model.id === selectedModelId;
+                                const isCheapest = model.id === bestModel?.id;
 
-                              // Desglose para barras apiladas
-                              const inputH = (stats.totalInput / 1000000 * model.inputPrice / totalCost) * 100;
-                              const outputH = (stats.totalOutput / 1000000 * model.outputPrice / totalCost) * 100;
-                              const cacheH = (stats.totalCache / 1000000 * model.cachePrice / totalCost) * 100;
+                                // Desglose para barras apiladas
+                                const inputH = (stats.totalInput / 1000000 * model.inputPrice / totalCost) * 100;
+                                const outputH = (stats.totalOutput / 1000000 * model.outputPrice / totalCost) * 100;
+                                const cacheH = (stats.totalCache / 1000000 * model.cachePrice / totalCost) * 100;
 
                               return (
                                 <div 
@@ -1252,8 +1253,9 @@ export default function App() {
                               
                               {/* Generar Path del Area Chart */}
                               {(() => {
+                                const denom = Math.max(trendData.length - 1, 1);
                                 const points = trendData.map((d, i) => {
-                                  const x = (i / (trendData.length - 1)) * 100;
+                                  const x = (i / denom) * 100;
                                   const y = 100 - (d.cost / maxTrendCost) * 100;
                                   return `${x},${y}`;
                                 });
@@ -1287,15 +1289,15 @@ export default function App() {
                                     
                                     {/* Puntos de interacción (invisible para hover) */}
                                     {trendData.map((d, i) => {
-                                      const x = `${(i / (trendData.length - 1)) * 100}%`;
+                                      const x = `${(i / denom) * 100}%`;
                                       const y = `${100 - (d.cost / maxTrendCost) * 100}%`;
                                       return (
                                         <g key={i} className="group/point">
                                           <circle cx={x} cy={y} r="4" className="fill-cyan-400 opacity-0 group-hover/point:opacity-100 transition-opacity" />
                                           <rect x={`calc(${x} - 20px)`} y="0" width="40" height="100%" className="fill-transparent cursor-crosshair" />
                                           
-                                          {/* Tooltip temporal */}
-                                          <foreignObject x={`calc(${x} - 60px)`} y={`calc(${y} - 70px)`} width="120" height="60" className="opacity-0 group-hover/point:opacity-100 transition-opacity pointer-events-none">
+                                          {/* Tooltip con soporte para touch (active) */}
+                                          <foreignObject x={`calc(${x} - 60px)`} y={`calc(${y} - 70px)`} width="120" height="60" className="opacity-0 group-hover/point:opacity-100 group-active/point:opacity-100 transition-opacity pointer-events-none">
                                             <div className="bg-oled/90 backdrop-blur-md border border-white/10 p-2 rounded-xl text-center shadow-2xl">
                                               <p className="text-[8px] text-slate-500 font-bold uppercase">{formatShortDate(d.date)}</p>
                                               <p className="text-xs font-black text-cyan-400 font-mono">{formatCurrency(d.cost)}</p>
@@ -1533,7 +1535,7 @@ export default function App() {
       {/* Modal para Agregar/Editar Modelo */}
       <AnimatePresence>
         {isModelModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-oled/80 backdrop-blur-xl">
+          <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4 bg-oled/80 backdrop-blur-xl">
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
