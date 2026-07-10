@@ -133,6 +133,7 @@ export default function App() {
   const [cursorPlanId, setCursorPlanId] = useState('pro');
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [chartMode, setChartMode] = useState<'models' | 'trends'>('models');
+  const [selectedTrendIndex, setSelectedTrendIndex] = useState<number | null>(null);
   
   // Referencias y estados para el scroll por arrastre horizontal del gráfico de comparación
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -732,7 +733,7 @@ export default function App() {
 
             {/* Subir nuevo CSV */}
             <div className="flex items-center">
-              <label className="island-button bg-cyan-500/10 hover:bg-cyan-500/20 ring-cyan-500/20 hover:ring-cyan-500/30 text-cyan-400 cursor-pointer">
+              <label className="island-button group bg-cyan-500/10 hover:bg-cyan-500/20 ring-cyan-500/20 hover:ring-cyan-500/30 text-cyan-400 cursor-pointer">
                 <div className="button-icon-wrapper bg-cyan-500/20">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -1095,7 +1096,10 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   <div className="flex bg-white/5 p-1 rounded-full ring-1 ring-white/10">
                     <button 
-                      onClick={() => setChartMode('models')}
+                      onClick={() => {
+                        setChartMode('models');
+                        setSelectedTrendIndex(null);
+                      }}
                       className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${chartMode === 'models' ? 'bg-cyan-500 text-cyan-950 shadow-lg shadow-cyan-500/20' : 'text-slate-500 hover:text-slate-300'}`}
                     >
                       Modelos
@@ -1109,7 +1113,7 @@ export default function App() {
                   </div>
 
                   {bestModel && chartMode === 'models' && (
-                    <div className="island-button bg-emerald-500/10 text-emerald-400 ring-emerald-500/20 hover:bg-emerald-500/20">
+                    <div className="island-button group bg-emerald-500/10 text-emerald-400 ring-emerald-500/20 hover:bg-emerald-500/20">
                       <div className="button-icon-wrapper bg-emerald-500/20">
                         <svg className="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" />
@@ -1141,6 +1145,7 @@ export default function App() {
                     onMouseLeave={handleMouseLeave}
                     onMouseUp={handleMouseUp}
                     onMouseMove={handleMouseMove}
+                    onClick={() => setSelectedTrendIndex(null)}
                     className="overflow-x-auto scrollbar-none pb-2 cursor-grab active:cursor-grabbing select-none"
                   >
                     <div 
@@ -1164,16 +1169,16 @@ export default function App() {
                             transition={{ duration: 0.5, ease: premiumEase }}
                             className="flex justify-around items-end w-full h-full"
                           >
-                              {modelComparisons.map((model) => {
-                                const totalCost = Math.max(model.totalCost, 1e-9);
-                                const heightPercent = Math.max((model.totalCost / maxCompareCost) * 100, 3);
-                                const isSelected = model.id === selectedModelId;
-                                const isCheapest = model.id === bestModel?.id;
+                            {modelComparisons.map((model) => {
+                              const totalCost = Math.max(model.totalCost, 1e-9);
+                              const heightPercent = Math.max((model.totalCost / maxCompareCost) * 100, 3);
+                              const isSelected = model.id === selectedModelId;
+                              const isCheapest = model.id === bestModel?.id;
 
-                                // Desglose para barras apiladas
-                                const inputH = (stats.totalInput / 1000000 * model.inputPrice / totalCost) * 100;
-                                const outputH = (stats.totalOutput / 1000000 * model.outputPrice / totalCost) * 100;
-                                const cacheH = (stats.totalCache / 1000000 * model.cachePrice / totalCost) * 100;
+                              // Desglose para barras apiladas
+                              const inputH = (stats.totalInput / 1000000 * model.inputPrice / totalCost) * 100;
+                              const outputH = (stats.totalOutput / 1000000 * model.outputPrice / totalCost) * 100;
+                              const cacheH = (stats.totalCache / 1000000 * model.cachePrice / totalCost) * 100;
 
                               return (
                                 <div 
@@ -1291,13 +1296,33 @@ export default function App() {
                                     {trendData.map((d, i) => {
                                       const x = `${(i / denom) * 100}%`;
                                       const y = `${100 - (d.cost / maxTrendCost) * 100}%`;
+                                      const isSelected = selectedTrendIndex === i;
+
                                       return (
-                                        <g key={i} className="group/point">
-                                          <circle cx={x} cy={y} r="4" className="fill-cyan-400 opacity-0 group-hover/point:opacity-100 transition-opacity" />
+                                        <g 
+                                          key={i} 
+                                          className="group/point"
+                                          onPointerDown={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedTrendIndex(isSelected ? null : i);
+                                          }}
+                                        >
+                                          <circle 
+                                            cx={x} 
+                                            cy={y} 
+                                            r={isSelected ? "6" : "4"} 
+                                            className={`fill-cyan-400 transition-all duration-300 ${isSelected ? 'opacity-100 ring-4 ring-cyan-500/20' : 'opacity-0 group-hover/point:opacity-100'}`} 
+                                          />
                                           <rect x={`calc(${x} - 20px)`} y="0" width="40" height="100%" className="fill-transparent cursor-crosshair" />
                                           
-                                          {/* Tooltip con soporte para touch (active) */}
-                                          <foreignObject x={`calc(${x} - 60px)`} y={`calc(${y} - 70px)`} width="120" height="60" className="opacity-0 group-hover/point:opacity-100 group-active/point:opacity-100 transition-opacity pointer-events-none">
+                                          {/* Tooltip con soporte para touch (active) y persistencia (isSelected) */}
+                                          <foreignObject 
+                                            x={`calc(${x} - 60px)`} 
+                                            y={`calc(${y} - 70px)`} 
+                                            width="120" 
+                                            height="60" 
+                                            className={`transition-opacity pointer-events-none ${isSelected ? 'opacity-100' : 'opacity-0 group-hover/point:opacity-100'}`}
+                                          >
                                             <div className="bg-oled/90 backdrop-blur-md border border-white/10 p-2 rounded-xl text-center shadow-2xl">
                                               <p className="text-[8px] text-slate-500 font-bold uppercase">{formatShortDate(d.date)}</p>
                                               <p className="text-xs font-black text-cyan-400 font-mono">{formatCurrency(d.cost)}</p>
@@ -1619,7 +1644,7 @@ export default function App() {
                   <div className="pt-6 flex flex-col sm:flex-row gap-3">
                     <button 
                       type="submit" 
-                      className="flex-1 island-button bg-cyan-500 text-cyan-950 hover:bg-cyan-400 ring-cyan-500/50 justify-center"
+                      className="flex-1 island-button group bg-cyan-500 text-cyan-950 hover:bg-cyan-400 ring-cyan-500/50 justify-center"
                     >
                       <span className="text-sm font-black uppercase tracking-widest">
                         {isEditing ? 'Guardar' : 'Crear'}
@@ -1628,7 +1653,7 @@ export default function App() {
                     <button 
                       type="button" 
                       onClick={handleCancelEdit}
-                      className="flex-1 island-button bg-white/5 text-white hover:bg-white/10 ring-white/10 justify-center"
+                      className="flex-1 island-button group bg-white/5 text-white hover:bg-white/10 ring-white/10 justify-center"
                     >
                       <span className="text-sm font-black uppercase tracking-widest">Cancelar</span>
                     </button>
