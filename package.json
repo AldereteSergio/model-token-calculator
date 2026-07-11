@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "update-models": "cd scripts/updater && go run main.go"
   },
   "dependencies": {
     "framer-motion": "^12.42.2",

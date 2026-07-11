@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import initialModelsData from './data/models.json';
 
 const premiumEase = [0.32, 0.72, 0, 1] as const;
 
@@ -31,27 +32,6 @@ const INITIAL_CSV_DATA = [
   { "date": "2026-06-05", "input": 530722.0, "output": 6971.0, "cache": 1729897.0, "total": 2267590.0 },
   { "date": "2026-06-06", "input": 1345005.0, "output": 54545.0, "cache": 6774201.0, "total": 8173751.0 },
   { "date": "2026-06-07", "input": 7738433.0, "output": 355164.0, "cache": 32094962.0, "total": 40188559.0 }
-];
-
-// Modelos iniciales de ejemplo con tarifas reales por 1 Millón de tokens (USD)
-const INITIAL_MODELS = [
-  { id: '1', name: 'nemotron-3-ultra-550b-a55b', inputPrice: 0.50, outputPrice: 2.50, cachePrice: 0.50 },
-  { id: '2', name: 'minimax-m3', inputPrice: 0.60, outputPrice: 2.40, cachePrice: 0.12 },
-  { id: '3', name: 'qwen3.7-max', inputPrice: 1.25, outputPrice: 3.75, cachePrice: 0.25 },
-  { id: '4', name: 'gemini-3.5-flash', inputPrice: 1.50, outputPrice: 9.00, cachePrice: 0.15 },
-  { id: '5', name: 'gemini-3.1-flash-lite', inputPrice: 0.25, outputPrice: 1.50, cachePrice: 0.025 },
-  { id: '6', name: 'grok-4.3', inputPrice: 1.25, outputPrice: 2.50, cachePrice: 0.20 },
-  { id: '7', name: 'qwen3.6-flash', inputPrice: 0.25, outputPrice: 1.50, cachePrice: 0.025 },
-  { id: '8', name: 'deepseek-v4-pro', inputPrice: 0.435, outputPrice: 0.87, cachePrice: 0.003625 },
-  { id: '9', name: 'deepseek-v4-flash', inputPrice: 0.0983, outputPrice: 0.1966, cachePrice: 0.0197 },
-  { id: '10', name: 'kimi-k2.6', inputPrice: 0.95, outputPrice: 4.00, cachePrice: 0.25 },
-  { id: '11', name: 'glm-5.1', inputPrice: 0.98, outputPrice: 3.08, cachePrice: 0.182 },
-  { id: '12', name: 'minimax-m2.7', inputPrice: 0.30, outputPrice: 1.20, cachePrice: 0.06 },
-  { id: '13', name: 'gemini-3.1-flash-lite-preview', inputPrice: 0.25, outputPrice: 1.50, cachePrice: 0.025 },
-  { id: '14', name: 'gemini-3.1-pro-preview', inputPrice: 2.00, outputPrice: 12.00, cachePrice: 0.20 },
-  { id: '15', name: 'minimax-m2.5', inputPrice: 0.15, outputPrice: 1.15, cachePrice: 0.03 },
-  { id: '16', name: 'kimi-k2.5', inputPrice: 0.40, outputPrice: 1.90, cachePrice: 0.09 },
-  { id: '17', name: 'gemini-3-flash-preview', inputPrice: 0.50, outputPrice: 3.00, cachePrice: 0.05 }
 ];
 
 const CURSOR_PLANS = [
@@ -126,7 +106,7 @@ type NotificationState = { message: string; type: 'success' | 'error' } | null;
 
 export default function App() {
   const [csvData, setCsvData] = useState(INITIAL_CSV_DATA);
-  const [models, setModels] = useState(INITIAL_MODELS);
+  const [models, setModels] = useState(initialModelsData);
   const [selectedModelId, setSelectedModelId] = useState('4'); // gemini-3.5-flash por defecto
   const [vsModelAId, setVsModelAId] = useState('4');
   const [vsModelBId, setVsModelBId] = useState('9'); // deepseek-v4-flash por defecto
